@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Prueba en https</title>
+    <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+    <script src="./js/face-api.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/webcamjs/1.0.25/webcam.min.js"></script>
+    <script src="./js/jquery.blockUI.js"></script>
+
+    <link
+      rel="stylesheet"
+      href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css"
+      integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u"
+      crossorigin="anonymous"
+    />
+  </head>
+  <body class="container">
+    <div id="todo">
+      <h2>Imágenes a comparar:</h2>
+
+      <div class="row">
+        <div class="col-md-6 alert alert-info" id="wrapresultados">
+          <h3>
+            Resultado: <span class="label label-default" id="resultado"></span>
+          </h3>
+          <h5>
+            Distancia Euclidiana:
+            <span class="label label-warning" id="distancia"></span>
+          </h5>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="wrapper col-sm-5 alert alert-warning">
+          <h3>Imagen de referencia</h3>
+          <img id="img00" src="" style="display: none;" />
+          <input
+            id="fileupload00"
+            type="file"
+            onchange="uploadImage('00')"
+            accept=".jpg, .jpeg, .png"
+          />
+          <canvas id="canvas00" width="240" height="320"></canvas>
+        </div>
+
+        <div class="col-sm-1"></div>
+
+        <div class="wrapper col-sm-5 alert alert-warning">
+          <h3>Imagen a comparar</h3>
+          <img id="img01" src="" style="display: none;" />
+          <input
+            id="fileupload01"
+            type="file"
+            onchange="uploadImage('01')"
+            accept=".jpg, .jpeg, .png"
+          />
+          <canvas id="canvas01" width="240" height="320"></canvas>
+
+          <div id="webcamdiv" class="">
+            <button id="desdelawebcam" class="btn btn-info">
+              Tomar foto desde la webcam
+            </button>
+
+            <div id="camara">
+              <div id="my_camera" style="width: 240px; height: 320px;"></div>
+              <br />
+              <input
+                type="button"
+                value="Tomar Foto"
+                class="btn btn-primary pull-left"
+                onClick="take_snapshot()"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="mientras">
+      <h3>Espere mientras se cargan los modelos...</h3>
+    </div>
+  </body>
+
+  <script>
+    const MODELS_URI = 'https://cgarciagl.github.io/face-api.js/models/';
+    let resultados = { res00: null, res01: null };
+
+    const displaySize = {
+      width: 240,
+      height: 320,
+    };
+
+    async function uploadImage(cual) {
+      $.blockUI({ message: '<h1>Un momento...</h1>' });
+      const imgFile = document.getElementById('fileupload' + cual).files[0];
+      const img = await faceapi.bufferToImage(imgFile);
+      document.getElementById('img' + cual).src = img.src;
+      var c = document.getElementById('canvas' + cual);
+      var ctx = c.getContext('2d');
+
+      const input = img;
+      const result = await faceapi
+        .detectSingleFace(input, new faceapi.TinyFaceDetectorOptions())
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+      resultados[`res${cual}`] = result;
+
+      c.getContext('2d').clearRect(0, 0, c.width, c.height);
+      const ar = c.width / img.width;
+      ctx.drawImage(img, 10, 10, img.width * ar, img.height * ar);
+      if (result) {
+        const resizedDetections = faceapi.resizeResults(result, displaySize);
+        faceapi.draw.drawDetections(c, resizedDetections);
+        faceapi.draw.drawFaceLandmarks(c, resizedDetections);
+      } else {
+        ctx.fillText('No se detecta un rostro', 10, 10);
+      }
+      $.unblockUI();
+      compara();
+    }
+
+    function compara() {
+      if (resultados.res00 && resultados.res01) {
+        let distance = faceapi.utils.round(
+          faceapi.euclideanDistance(
+            resultados.res00.descriptor,
+            resultados.res01.descriptor
+          )
+        );
+        $('#distancia').text(distance);
+        if (distance > 0.6) {
+          $('#resultado')
+            .text('No es el mismo')
+            .addClass('label-danger')
+            .removeClass('label-success');
+        } else {
+          $('#resultado')
+            .text('Si es el mismo !!!')
+            .removeClass('label-danger')
+            .addClass('label-success');
+        }
+        $('#wrapresultados')
+          .fadeOut(200)
+          .fadeIn(200)
+          .fadeOut(200)
+          .fadeIn(200)
+          .fadeOut(200)
+          .fadeIn(200)
+          .fadeOut(200)
+          .fadeIn(200);
+      } else {
+        $('#resultado')
+          .text('No se puede comprarar...')
+          .removeClass('label-danger')
+          .removeClass('label-success');
+      }
+      $(window).scrollTop(0);
+    }
+
+    async function run() {
+      await faceapi.nets.tinyFaceDetector.loadFromUri(MODELS_URI);
+      await faceapi.nets.faceLandmark68Net.loadFromUri(MODELS_URI);
+      await faceapi.nets.faceRecognitionNet.loadFromUri(MODELS_URI);
+      await todoCargado();
+    }
+
+    function todoCargado() {
+      $('#todo').show('slow');
+      $('#mientras').hide();
+    }
+
+    $(document).ready(function () {
+      $('#todo').hide();
+      $('#camara').hide();
+      run();
+    });
+
+    $('#desdelawebcam').click(function () {
+      $('#camara').show();
+      Webcam.set({
+        width: 240,
+        height: 320,
+        image_format: 'jpeg',
+        jpeg_quality: 120,
+      });
+      Webcam.attach('#my_camera');
+      $('#canvas01').hide();
+    });
+
+    function take_snapshot() {
+      $('#camara').hide();
+      $('#canvas01').show();
+      Webcam.snap(async function (data_uri) {
+        document.getElementById('img01').src = data_uri;
+
+        var c = document.getElementById('canvas01');
+        var ctx = c.getContext('2d');
+        const img = document.getElementById('img01');
+        const input = img;
+        const result = await faceapi
+          .detectSingleFace(input, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks()
+          .withFaceDescriptor();
+        resultados[`res01`] = result;
+
+        c.getContext('2d').clearRect(0, 0, c.width, c.height);
+        ctx.drawImage(img, 10, 10, img.width, img.height);
+        if (result) {
+          faceapi.draw.drawDetections(c, result);
+          faceapi.draw.drawFaceLandmarks(c, result);
+        } else {
+          ctx.fillText('No se detecta un rostro', 10, 10);
+          alert('no se detectó tu cara, intentalo de nuevo...');
+        }
+        compara();
+      });
+    }
+  </script>
+
+  <style>
+    .wrapper {
+      height: auto;
+    }
+  </style>
+</html>

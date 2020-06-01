@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Prueba de video</title>
+    <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+    <script src="./js/face-api.min.js"></script>
+    <script src="./js/jquery.blockUI.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/webcamjs/1.0.25/webcam.min.js"></script>
+
+    <link
+      rel="stylesheet"
+      href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css"
+      integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u"
+      crossorigin="anonymous"
+    />
+  </head>
+  <body class="container">
+    <div id="todo">
+      <div class="row">
+        <div class="col-md-6 alert alert-info" id="wrapresultados">
+          <h3>
+            Resultado: <span class="label label-default" id="resultado"></span>
+          </h3>
+          <h5>
+            Distancia Euclidiana:
+            <span class="label label-warning" id="distancia"></span>
+          </h5>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="wrapper col-sm-5 alert alert-warning">
+          <h3>Video a comparar</h3>
+          <canvas
+            id="canvas01"
+            width="240"
+            height="320"
+            style="position: absolute;"
+          ></canvas>
+          <div id="my_camera" style="width: 240px; height: 320px;"></div>
+        </div>
+
+        <div class="col-sm-1"></div>
+
+        <div class="wrapper col-sm-5 alert alert-warning">
+          <h3>Imagen de referencia</h3>
+          <img id="img00" src="" style="display: none;" />
+          <input
+            id="fileupload00"
+            type="file"
+            onchange="uploadImage('00')"
+            accept=".jpg, .jpeg, .png"
+          />
+          <canvas id="canvas00" width="240" height="320"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div id="mientras">
+      <h3>Espere mientras se cargan los modelos...</h3>
+    </div>
+  </body>
+
+  <script>
+    const MODELS_URI = 'https://cgarciagl.github.io/face-api.js/models/';
+    let resultados = { res00: null, res01: null };
+
+    function initwebcam() {
+      Webcam.set({
+        width: 240,
+        height: 320,
+        image_format: 'jpeg',
+        jpeg_quality: 120,
+      });
+      Webcam.attach('#my_camera');
+      init();
+    }
+
+    const displaySize = {
+      width: 240,
+      height: 320,
+    };
+
+    async function uploadImage(cual) {
+      $.blockUI({ message: '<h1>Un momento...</h1>' });
+      const imgFile = document.getElementById('fileupload' + cual).files[0];
+      const img = await faceapi.bufferToImage(imgFile);
+      document.getElementById('img' + cual).src = img.src;
+      var c = document.getElementById('canvas' + cual);
+      var ctx = c.getContext('2d');
+
+      const input = img;
+      const result = await faceapi
+        .detectSingleFace(input, new faceapi.TinyFaceDetectorOptions())
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+      resultados[`res${cual}`] = result;
+
+      c.getContext('2d').clearRect(0, 0, c.width, c.height);
+      const ar = c.width / img.width;
+      ctx.drawImage(img, 10, 10, img.width * ar, img.height * ar);
+      if (result) {
+        const resizedDetections = faceapi.resizeResults(result, displaySize);
+        // faceapi.draw.drawDetections(c, resizedDetections);
+        faceapi.draw.drawFaceLandmarks(c, resizedDetections);
+      } else {
+        ctx.fillText('No se detecta un rostro', 10, 10);
+      }
+      $.unblockUI();
+      compara();
+    }
+
+    function compara() {
+      if (resultados.res00 && resultados.res01) {
+        let distance = faceapi.utils.round(
+          faceapi.euclideanDistance(
+            resultados.res00.descriptor,
+            resultados.res01.descriptor
+          )
+        );
+        $('#distancia').text(distance);
+        if (distance > 0.6) {
+          $('#resultado')
+            .text('No es el mismo')
+            .addClass('label-danger')
+            .removeClass('label-success');
+        } else {
+          $('#resultado')
+            .text('Si es el mismo !!!')
+            .removeClass('label-danger')
+            .addClass('label-success');
+        }
+        $('#wrapresultados').fadeOut(100).fadeIn(100);
+      } else {
+        $('#resultado')
+          .text('No se puede comprarar...')
+          .removeClass('label-danger')
+          .removeClass('label-success');
+      }
+    }
+
+    async function run() {
+      await faceapi.nets.tinyFaceDetector.loadFromUri(MODELS_URI);
+      await faceapi.nets.faceLandmark68Net.loadFromUri(MODELS_URI);
+      await faceapi.nets.faceRecognitionNet.loadFromUri(MODELS_URI);
+      await todoCargado();
+    }
+
+    function todoCargado() {
+      $('#todo').show();
+      $('#mientras').hide();
+      initwebcam();
+      //$('video').hide();
+    }
+
+    $(document).ready(function () {
+      $('#todo').hide();
+      run();
+    });
+
+    function init() {
+      canvas = document.getElementById('canvas01');
+      video = $('video')[0];
+
+      faceapi.matchDimensions(canvas, displaySize);
+
+      setInterval(async () => {
+        const detections = await faceapi
+          .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks()
+          .withFaceDescriptor();
+        resultados[`res01`] = detections;
+        const context = canvas.getContext('2d');
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        const ar = canvas.width / video.width;
+        // context.drawImage(video, 10, 10, video.width * ar, video.height * ar);
+        if (detections) {
+          const resizedDetections = faceapi.resizeResults(
+            detections,
+            displaySize
+          );
+          // faceapi.draw.drawDetections(canvas, resizedDetections);
+          faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
+        }
+        compara();
+      }, 500);
+    }
+  </script>
+
+  <style>
+    .wrapper {
+      height: auto;
+    }
+  </style>
+</html>
