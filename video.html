@@ -77,7 +77,7 @@
         jpeg_quality: 120,
       });
       Webcam.attach('#my_camera');
-      init();
+      iniciarEscaneoDeVideo();
     }
 
     const displaySize = {
@@ -154,7 +154,6 @@
       $('#todo').show();
       $('#mientras').hide();
       initwebcam();
-      //$('video').hide();
     }
 
     $(document).ready(function () {
@@ -162,7 +161,7 @@
       run();
     });
 
-    function init() {
+    function iniciarEscaneoDeVideo() {
       canvas = document.getElementById('canvas01');
       video = $('video')[0];
 
@@ -177,7 +176,6 @@
         const context = canvas.getContext('2d');
         context.clearRect(0, 0, canvas.width, canvas.height);
         const ar = canvas.width / video.width;
-        // context.drawImage(video, 10, 10, video.width * ar, video.height * ar);
         if (detections) {
           const resizedDetections = faceapi.resizeResults(
             detections,
